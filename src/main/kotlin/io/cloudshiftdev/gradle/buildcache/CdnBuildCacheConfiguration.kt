@@ -81,11 +81,3 @@ public fun CdnBuildCacheConfiguration.s3(action: Action<S3BuildCacheConfiguratio
     val s3Config = S3BuildCacheConfiguration(this)
     action.execute(s3Config)
 }
-
-/**
- * Common configuration when using CloudFront with S3 as the build cache. Sets the S3 storage class
- * to One Zone Infrequent Access.
- */
-public fun CdnBuildCacheConfiguration.awsCloudFrontWithS3() {
-    s3 { storageClass(S3BuildCacheConfiguration.StorageClass.OneZoneInfrequentAccess) }
-}
