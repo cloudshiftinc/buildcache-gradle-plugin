@@ -1,0 +1,45 @@
+name: publish
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - 'README.md'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      # https://github.com/gradle/actions/tree/main/setup-gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4.3.1
+
+        # https://github.com/gradle/actions/tree/main/dependency-submission
+      - name: "Generate and submit dependency graph"
+        uses: "gradle/actions/dependency-submission@06832c7b30a0129d7fb559bcc6e43d26f6374244" # v4
+        env:
+          DEPENDENCY_GRAPH_EXCLUDE_PROJECTS: "^:(build-logic|buildSrc|.*[Tt]test.*)"
+          DEPENDENCY_GRAPH_EXCLUDE_CONFIGURATIONS: ".*[Tt]est.*Classpath"
+
+      - name: Publish
+        env:
+          GRADLE_PUBLISH_KEY: '${{ secrets.PLUGIN_PORTAL_KEY }}'
+          GRADLE_PUBLISH_SECRET: '${{ secrets.PLUGIN_PORTAL_SECRET }}'
+          ORG_GRADLE_PROJECT_SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_SIGNING_PWD: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew publishPlugins --no-configuration-cache
