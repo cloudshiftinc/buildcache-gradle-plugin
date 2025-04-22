@@ -1,4 +1,3 @@
-
 import java.nio.charset.StandardCharsets
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent

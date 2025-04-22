@@ -2,7 +2,10 @@ package io.cloudshiftdev.gradle.buildcache
 
 import com.google.common.base.Throwables
 import io.cloudshiftdev.gradle.buildcache.util.CountingInputStream
+import java.text.DecimalFormat
 import java.util.*
+import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.time.Duration
 import kotlin.time.TimeSource
 import okhttp3.HttpUrl
@@ -30,7 +33,7 @@ internal class CdnBuildCacheService(
     private companion object {
         val BuildCacheContentType = "application/vnd.gradle.build-cache-artifact.v2".toMediaType()
         val AcceptHeaderValue = listOf(BuildCacheContentType, "*/*".toMediaType()).joinToString(",")
-        val logger  = org.gradle.api.logging.Logging.getLogger(CdnBuildCacheService::class.java)
+        val logger = org.gradle.api.logging.Logging.getLogger(CdnBuildCacheService::class.java)
     }
 
     data class Credentials(val username: String, val password: String)
@@ -43,9 +46,7 @@ internal class CdnBuildCacheService(
         val url = key.toUrl()
 
         val request =
-            Request.Builder().url(url)
-                .header("Accept", AcceptHeaderValue)
-                .addCredentials().build()
+            Request.Builder().url(url).header("Accept", AcceptHeaderValue).addCredentials().build()
 
         val mark = timeSource.markNow()
         return try {
@@ -65,7 +66,7 @@ internal class CdnBuildCacheService(
                                         cdnCacheStatus =
                                             CdnCacheStatus.from(response.header(cdnCacheHeader)),
                                     ),
-                                ),
+                                )
                             )
                         }
                     }
@@ -75,22 +76,26 @@ internal class CdnBuildCacheService(
                             tracker.recordBuildCacheAction(
                                 BuildCacheAction.Load(
                                     url,
-                                    LoadStatus.Miss("${response.code} ${response.message} ${response.body.string()}"),
-                                ),
+                                    LoadStatus.Miss(
+                                        "${response.code} ${response.message} ${response.body.string()}"
+                                    ),
+                                )
                             )
                         }
                     }
 
-                    else -> throw BuildCacheException("${response.code} ${response.message} ${response.body.string()}")
+                    else ->
+                        throw BuildCacheException(
+                            "${response.code} ${response.message} ${response.body.string()}"
+                        )
                 }
             }
-
         } catch (e: Exception) {
             tracker.recordBuildCacheAction(
                 BuildCacheAction.Load(
                     url,
                     LoadStatus.Failure(Throwables.getRootCause(e).toString()),
-                ),
+                )
             )
             throw e
         }
@@ -102,10 +107,7 @@ internal class CdnBuildCacheService(
 
         if (writer.size > maxCacheEntrySize) {
             tracker.recordBuildCacheAction(
-                BuildCacheAction.Store(
-                    url,
-                    StoreStatus.TooLarge(writer.size),
-                ),
+                BuildCacheAction.Store(url, StoreStatus.TooLarge(writer.size))
             )
             return
         }
@@ -121,9 +123,13 @@ internal class CdnBuildCacheService(
                 }
             }
 
-        val request = Request.Builder().url(url).put(requestBody)
-            .addHeaders(storeHeaders)
-            .addCredentials().build()
+        val request =
+            Request.Builder()
+                .url(url)
+                .put(requestBody)
+                .addHeaders(storeHeaders)
+                .addCredentials()
+                .build()
 
         val mark = timeSource.markNow()
         try {
@@ -137,12 +143,14 @@ internal class CdnBuildCacheService(
                                     bytes = writer.size,
                                     duration = timeSource.markNow() - mark,
                                 ),
-                            ),
+                            )
                         )
                     }
 
                     else ->
-                        throw BuildCacheException("${response.code} ${response.message} ${response.body.string()}")
+                        throw BuildCacheException(
+                            "${response.code} ${response.message} ${response.body.string()}"
+                        )
                 }
             }
         } catch (e: Exception) {
@@ -150,22 +158,57 @@ internal class CdnBuildCacheService(
                 BuildCacheAction.Store(
                     url,
                     StoreStatus.Failure(Throwables.getRootCause(e).toString()),
-                ),
+                )
             )
             throw e
         }
     }
 
     override fun close() {
-        if(logger.isInfoEnabled) {
-            tracker.actions().forEach { action ->
-                logger.info("{}", action)
-            }
+        if (logger.isInfoEnabled) {
+            tracker.actions().forEach { action -> logger.info("{}", action) }
         }
-        logger.lifecycle("CDN build cache metrics: ${tracker.summarize()}")
+
+        val metrics = tracker.summarize()
+
+        val loadMetrics = metrics.cacheLoadMetrics
+        val loadHitPct =
+            if (loadMetrics.loadRequests > 0) {
+                loadMetrics.cacheHits.toDouble() / loadMetrics.loadRequests * 100
+            } else {
+                0.0
+            }
+
+        val cdnHitPct =
+            if (loadMetrics.cacheHits > 0) {
+                loadMetrics.cacheHitMetrics.cdnHits.toDouble() / loadMetrics.cacheHits * 100
+            } else {
+                0.0
+            }
+
+        fun Double.format(scale: Int) = "%.${scale}f".format(this)
+        fun Long.formatByteCount(si: Boolean = true): String {
+            val unit = if (si) 1000 else 1024
+            if (this < unit) return "$this B"
+            val exp = (ln(this.toDouble()) / ln(unit.toDouble())).toInt()
+            val pre = (if (si) "kMGTPE" else "KMGTPE")[exp - 1] + if (si) "" else "i"
+            val formattedValue =
+                DecimalFormat("#.##").format(this / unit.toDouble().pow(exp.toDouble()))
+            return "$formattedValue ${pre}B"
+        }
+
+        logger.lifecycle(
+            "CDN build cache load metrics: ${loadHitPct.format(1)}% ${loadMetrics.cacheMisses} misses, ${loadMetrics.cacheHits} hits (${loadMetrics.cacheHitMetrics.bytes.formatByteCount()}, ${loadMetrics.cacheHitMetrics.duration.inWholeSeconds}s; CDN: ${cdnHitPct.format(1)}% ${loadMetrics.cacheHitMetrics.cdnHits} hits, ${loadMetrics.cacheHitMetrics.cdnMisses} misses, ${loadMetrics.cacheHitMetrics.cdnUnknown} unknown)"
+        )
+
+        val storeMetrics = metrics.cacheStoreMetrics
+        logger.lifecycle(
+            "CDN build cache store metrics: ${storeMetrics.storeRequests} requests, ${storeMetrics.storedBytes.formatByteCount()}, ${storeMetrics.storeDuration.inWholeSeconds}s; skipped too large: ${storeMetrics.skippedTooLarge} (${storeMetrics.skippedTooLargeBytes} bytes)"
+        )
     }
 
-    private fun BuildCacheKey.toUrl(): HttpUrl = baseUrl.newBuilder().addPathSegment(hashCode).build()
+    private fun BuildCacheKey.toUrl(): HttpUrl =
+        baseUrl.newBuilder().addPathSegment(hashCode).build()
 
     private fun Request.Builder.addCredentials(): Request.Builder {
         cdnBuildCacheCredentials?.let {
@@ -177,9 +220,7 @@ internal class CdnBuildCacheService(
 }
 
 private fun Request.Builder.addHeaders(storeHeaders: Map<String, String>): Request.Builder {
-    storeHeaders.forEach { (key, value) ->
-        addHeader(key, value)
-    }
+    storeHeaders.forEach { (key, value) -> addHeader(key, value) }
     return this
 }
 
@@ -246,16 +287,20 @@ private class MetricsTracker {
                 CacheHitMetrics(
                     bytes = acc.bytes + loadStatus.bytes,
                     duration = acc.duration + loadStatus.duration,
-                    cdnHits = if (loadStatus.cdnCacheStatus is CdnCacheStatus.Hit) acc.cdnHits + 1 else acc.cdnHits,
-                    cdnMisses = if (loadStatus.cdnCacheStatus is CdnCacheStatus.Miss) acc.cdnMisses + 1 else acc.cdnMisses,
-                    cdnUnknown = if (loadStatus.cdnCacheStatus is CdnCacheStatus.Unknown) acc.cdnUnknown + 1 else acc.cdnUnknown,
+                    cdnHits =
+                        if (loadStatus.cdnCacheStatus is CdnCacheStatus.Hit) acc.cdnHits + 1
+                        else acc.cdnHits,
+                    cdnMisses =
+                        if (loadStatus.cdnCacheStatus is CdnCacheStatus.Miss) acc.cdnMisses + 1
+                        else acc.cdnMisses,
+                    cdnUnknown =
+                        if (loadStatus.cdnCacheStatus is CdnCacheStatus.Unknown) acc.cdnUnknown + 1
+                        else acc.cdnUnknown,
                 )
             }
 
-        val cacheLoadMetrics = CacheLoadMetrics(
-            cacheMisses = loadMisses,
-            cacheHitMetrics = cacheHitMetrics,
-        )
+        val cacheLoadMetrics =
+            CacheLoadMetrics(cacheMisses = loadMisses, cacheHitMetrics = cacheHitMetrics)
 
         val storeActions = actions.filterIsInstance<BuildCacheAction.Store>()
 
@@ -300,13 +345,10 @@ private class MetricsTracker {
 
     data class CacheMetrics(
         val cacheLoadMetrics: CacheLoadMetrics,
-        val cacheStoreMetrics: CacheStoreMetrics
+        val cacheStoreMetrics: CacheStoreMetrics,
     )
 
-    data class CacheLoadMetrics(
-        val cacheMisses: Int,
-        val cacheHitMetrics: CacheHitMetrics,
-    ) {
+    data class CacheLoadMetrics(val cacheMisses: Int, val cacheHitMetrics: CacheHitMetrics) {
         val cacheHits = cacheHitMetrics.hits
         val loadRequests = cacheHits + cacheMisses
     }

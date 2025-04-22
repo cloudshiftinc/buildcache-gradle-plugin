@@ -2,6 +2,8 @@ package io.cloudshiftdev.gradle.buildcache
 
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import org.gradle.api.logging.Logging
 import org.gradle.caching.BuildCacheService
 import org.gradle.caching.BuildCacheServiceFactory
 
@@ -26,16 +28,13 @@ public class CdnBuildCacheServiceFactory : BuildCacheServiceFactory<CdnBuildCach
         val cdnCacheHeader = configuration.cdnCacheHeader.get()
         val maxCacheEntrySize = configuration.maxCacheEntrySize.get()
 
-        // TODO - don't hardcode this
-        val storeHeaders =
-            configuration.storeHeaders.get() + mapOf("x-amz-storage-class" to "ONEZONE_IA")
+        val storeHeaders = configuration.storeHeaders.get()
 
-//        val logging = HttpLoggingInterceptor()
-//        logging.setLevel(HttpLoggingInterceptor.Level.HEADERS)
+        val loggingInterceptor = HttpLoggingInterceptor(OkHttpLogger())
+        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.HEADERS)
+        loggingInterceptor.redactHeader("Authorization")
 
-        val httpClient = OkHttpClient.Builder()
-          // .addInterceptor(logging)
-            .build()
+        val httpClient = OkHttpClient.Builder().addInterceptor(loggingInterceptor).build()
 
         describer.apply {
             type("Content Delivery Network (CDN)")
@@ -46,13 +45,21 @@ public class CdnBuildCacheServiceFactory : BuildCacheServiceFactory<CdnBuildCach
         }
 
         return CdnBuildCacheService(
-                httpClient = httpClient,
-                baseUrl = baseUrl,
-                cdnBuildCacheCredentials = credentials,
-                bearerToken = bearerToken,
-                cdnCacheHeader = cdnCacheHeader,
-                maxCacheEntrySize = maxCacheEntrySize,
-                storeHeaders,
+            httpClient = httpClient,
+            baseUrl = baseUrl,
+            cdnBuildCacheCredentials = credentials,
+            bearerToken = bearerToken,
+            cdnCacheHeader = cdnCacheHeader,
+            maxCacheEntrySize = maxCacheEntrySize,
+            storeHeaders,
         )
+    }
+}
+
+private class OkHttpLogger : HttpLoggingInterceptor.Logger {
+    private val logger = Logging.getLogger(OkHttpLogger::class.java)
+
+    override fun log(message: String) {
+        logger.debug(message)
     }
 }
