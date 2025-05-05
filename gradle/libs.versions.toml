@@ -18,4 +18,4 @@ kotest-framework-datatest = { module = "io.kotest:kotest-framework-datatest" }
 kotest-property = { module = "io.kotest:kotest-property" }
 kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5" }
 
-mockk = { module = "io.mockk:mockk", version = "1.14.0" }
+mockk = { module = "io.mockk:mockk", version = "1.14.2" }
