@@ -14,7 +14,7 @@ plugins {
 
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
-    implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.16")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.14")
     implementation("com.google.guava:guava:33.4.8-jre")
 }
 
@@ -89,6 +89,7 @@ tasks {
 
     named<KotlinCompile>("compileKotlin") {
         compilerOptions {
+            jvmTarget = JvmTarget.JVM_17
             apiVersion = KotlinVersion.KOTLIN_2_0
             languageVersion = KotlinVersion.KOTLIN_2_0
         }
