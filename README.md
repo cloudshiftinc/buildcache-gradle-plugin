@@ -16,7 +16,7 @@ To use the CDN build cache in your project, apply the plugin in your `settings.g
 
 ```kotlin
 plugins {
-    id("io.cloudshitdev.buildcache") version "<latest>"
+    id("io.cloudshiftdev.buildcache") version "<latest>"
 }
 ```
 
