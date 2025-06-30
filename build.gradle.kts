@@ -13,8 +13,8 @@ plugins {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.16")
-    implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.16")
+    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.17")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.17")
     implementation("com.google.guava:guava:33.4.8-jre")
 }
 
