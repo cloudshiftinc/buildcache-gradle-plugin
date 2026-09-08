@@ -13,9 +13,9 @@ plugins {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.17")
-    implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.17")
-    implementation("com.google.guava:guava:33.4.8-jre")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.5.0")
+    implementation("com.google.guava:guava:33.7.1-jre")
 }
 
 gradlePlugin {
@@ -68,15 +68,16 @@ internal fun Project.ktfmtVersion(): String {
 }
 
 tasks {
-    val persistKtfmtVersion by registering {
-        inputs.property("ktfmtVersion", libs.ktfmt)
-        outputs.files(layout.buildDirectory.file("ktfmt-version.txt"))
-        doLast {
-            outputs.files.singleFile.writeText(
-                inputs.properties["ktfmtVersion"].toString().substringAfterLast(":")
-            )
+    val persistKtfmtVersion =
+        register("persistKtfmtVersion") {
+            inputs.property("ktfmtVersion", libs.ktfmt)
+            outputs.files(layout.buildDirectory.file("ktfmt-version.txt"))
+            doLast {
+                outputs.files.singleFile.writeText(
+                    inputs.properties["ktfmtVersion"].toString().substringAfterLast(":")
+                )
+            }
         }
-    }
 
     named<ProcessResources>("processResources") {
         from(persistKtfmtVersion) { into("buildcache-plugin") }
@@ -113,39 +114,37 @@ tasks {
 
 testing {
     suites {
-        val test by
-            getting(JvmTestSuite::class) {
-                useJUnitJupiter()
-                dependencies {
-                    implementation(platform(libs.kotest.bom))
-                    implementation(libs.kotest.assertions.core)
-                    implementation(libs.kotest.assertions.json)
-                    implementation(libs.kotest.framework.datatest)
-                    implementation(libs.kotest.property)
-                    implementation(libs.kotest.runner.junit5)
-                    implementation(libs.mockk)
-                }
-                targets {
-                    all {
-                        testTask.configure {
-                            outputs.upToDateWhen { false }
-                            testLogging {
-                                events =
-                                    setOf(
-                                        TestLogEvent.FAILED,
-                                        TestLogEvent.PASSED,
-                                        TestLogEvent.SKIPPED,
-                                        TestLogEvent.STANDARD_OUT,
-                                        TestLogEvent.STANDARD_ERROR,
-                                    )
-                                exceptionFormat = TestExceptionFormat.FULL
-                                showExceptions = true
-                                showCauses = true
-                                showStackTraces = true
-                            }
+        getByName<JvmTestSuite>("test") {
+            useJUnitJupiter()
+            dependencies {
+                implementation(platform(libs.kotest.bom))
+                implementation(libs.kotest.assertions.core)
+                implementation(libs.kotest.assertions.json)
+                implementation(libs.kotest.property)
+                implementation(libs.kotest.runner.junit5)
+                implementation(libs.mockk)
+            }
+            targets {
+                all {
+                    testTask.configure {
+                        outputs.upToDateWhen { false }
+                        testLogging {
+                            events =
+                                setOf(
+                                    TestLogEvent.FAILED,
+                                    TestLogEvent.PASSED,
+                                    TestLogEvent.SKIPPED,
+                                    TestLogEvent.STANDARD_OUT,
+                                    TestLogEvent.STANDARD_ERROR,
+                                )
+                            exceptionFormat = TestExceptionFormat.FULL
+                            showExceptions = true
+                            showCauses = true
+                            showStackTraces = true
                         }
                     }
                 }
             }
+        }
     }
 }
